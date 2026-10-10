@@ -1,0 +1,64 @@
+name: Build Dhyan APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Phone-friendly: you can upload the .zip as-is, this step unpacks it.
+      - name: Unpack any uploaded zip
+        run: |
+          shopt -s nullglob
+          for z in *.zip; do unzip -o -q "$z" -d _unzipped; done
+          true
+
+      - name: Find the project folder
+        id: loc
+        run: |
+          P=$(find . -name settings.gradle.kts -not -path './.git/*' | head -n1 | xargs -r dirname)
+          if [ -z "$P" ]; then echo "settings.gradle.kts not found - upload Dhyan.zip to the repo root"; exit 1; fi
+          echo "dir=$P" >> "$GITHUB_OUTPUT"
+          echo "Project at $P"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        working-directory: ${{ steps.loc.outputs.dir }}
+        run: gradle --no-daemon assembleDebug
+
+      - name: Collect APK
+        run: cp "${{ steps.loc.outputs.dir }}/app/build/outputs/apk/debug/app-debug.apk" Dhyan.apk
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dhyan-apk
+          path: Dhyan.apk
+
+      # Direct APK download link on the repo's Releases page (easiest on a phone)
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Dhyan build ${{ github.run_number }}
+          files: Dhyan.apk
+          
